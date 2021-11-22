@@ -1,0 +1,15 @@
+ale-py==0.7.3
+AutoROM==0.4.2
+certifi==2021.10.8
+charset-normalizer==2.0.7
+click==8.0.3
+cloudpickle==2.0.0
+gym==0.21.0
+idna==3.3
+importlib-resources==5.4.0
+numpy==1.21.4
+pyglet==1.5.21
+requests==2.26.0
+tqdm==4.62.3
+urllib3==1.26.7
+zipp==3.6.0

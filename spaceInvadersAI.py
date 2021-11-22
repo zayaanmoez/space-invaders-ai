@@ -1,10 +1,13 @@
-from gym import envs
 import gym
-print(envs.registry.all())
+# from ale_py import ALEInterface
+# import ale_py.roms as roms
+# print(roms.__all__)
+#
+# ale = ALEInterface()
+# ale.loadROM(space_invaders)
 
-env = gym.make('CartPole-v0')
+env = gym.make('ALE/SpaceInvaders-v5', render_mode='human')
 env.reset()
+
 for _ in range(1000):
-    env.render()
-    env.step(env.action_space.sample()) # take a random action
-env.close()
+    env.step(env.action_space.sample())
