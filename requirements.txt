@@ -13,3 +13,5 @@ requests==2.26.0
 tqdm==4.62.3
 urllib3==1.26.7
 zipp==3.6.0
+tensorflow==2.7.0
+matplotlib==3.5.0
