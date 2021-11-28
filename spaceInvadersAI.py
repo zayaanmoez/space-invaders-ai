@@ -1,9 +1,18 @@
 import gym
 import random
-import tensorflow as tf
+from tensorflow import keras
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import deque
+
+env = gym.make('ALE/SpaceInvaders-v5', render_mode='human')
+env.reset()
+
+state_shape = env.observation_space.shape
+action_shape = env.action_space.n
+
+#################################################################################
+# Preprocessing
 
 def preprocess(obs, normalize=False):
     # Crop out score and floor
@@ -59,51 +68,70 @@ def stack_frames(stacked_frames, state, is_new):
     stacked_state = np.stack(stacked_frames)
     return stacked_state, stacked_frames
 
+# Display the preprocessed images
+def preproces_plot():
+    obs = env.reset()
 
-env = gym.make('ALE/SpaceInvaders-v5')
-obs = env.reset()
+    for i in range(10):
+        # if i > 20:
+        f = plt.figure()
+        f.add_subplot(1,2,1)
+        plt.imshow(obs)
+        f.add_subplot(1,2,2)
+        plt.imshow(preprocess(obs), cmap='gray')
+        # plt.show(block=True)
 
+        # env.render()
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
 
-height, width, channels = env.observation_space.shape
-actions = env.action_space.n
-print(env.unwrapped.get_action_meanings())
+#################################################################################
+# Model
 
-for i in range(10):
-    # if i > 20:
-    f = plt.figure()
-    f.add_subplot(1,2,1)
-    plt.imshow(obs)
-    f.add_subplot(1,2,2)
-    plt.imshow(preprocess(obs), cmap='gray')
-    # plt.show(block=True)
+def agent(state_shape, action_shape):
 
-    env.render()
-
-    obs, _, _, _ = env.step(env.action_space.sample())
-
-
-
-env.close()
-
-
-
-# episodes = 5
-# for episode in range(1, episodes+1):
-#     state = env.reset()
-#     done = False
-#     score = 0 
+    learning_rate = 0.001
     
-#     while not done:
-#         env.render()
-#         action = random.choice([0,1,2,3,4,5])
-#         n_state, reward, done, info = env.step(action)
-#         score+=reward
-#     print('Episode:{} Score:{}'.format(episode, score))
-# print(type(obs))
+    initializer = keras.intialiazers.HeUniform()
+    model = keras.Sequential()
+    model.add(keras.layers.Dense(24, input_shape=state_shape, activation='relu', 
+        kernel_initializer=initializer))
+    model.add(keras.layers.Dense(24, input_shape=state_shape, activation='relu', kernel_initializer=init))
+    model.add(keras.layers.Dense(12, activation='relu', kernel_initializer=init))
+    model.add(keras.layers.Dense(action_shape, activation='linear', kernel_initializer=init))
+    model.compile(loss=keras.losses.Huber(), optimizer=keras.optimizers.Adam(lr=learning_rate), metrics=['accuracy'])
+    return model
+
+#################################################################################
+# Training agent
+
+def train():
+    episodes = 10
+    for episode in range(episodes):
+        env.reset()
+        score = 0 
+        done = False
+
+        while not done:
+            action = env.action_space.sample()
+            n_state, reward, done, info = env.step(action)
+            score+=reward
+        print('Episode:{} Score:{}'.format(episode, score))
+
+#################################################################################
+# Main
+
+if __name__ == "__main__":
+    # print(env.unwrapped.get_action_meanings())
+
+    # print(state_shape)
+    # train()
+    # preproces_plot()
 
 
-# print(env.action_space)
-# print(env.observation_space)
-# obs_preprocessed = preprocess(env.env)
-# plt.imshow(obs_preprocessed, cmap='gray')
-# plt.show()
+    # print(env.action_space)
+    # print(env.observation_space)
+    # obs_preprocessed = preprocess(env.env)
+    # plt.imshow(obs_preprocessed, cmap='gray')
+    # plt.show()
+    env.close()
