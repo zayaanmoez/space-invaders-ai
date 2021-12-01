@@ -50,8 +50,8 @@ def preprocess(obs, normalize=False):
     if normalize:
         img = (img - 128) / 128 - 1  
 
-    print("before: ", obs.shape)
-    print("after: ", img.shape)
+    # print("before: ", obs.shape)
+    # print("after: ", img.shape)
 
     # reshape to 1D tensor
     return img.reshape(85,80,1)
@@ -111,16 +111,16 @@ def network(state_shape, action_shape):
     model = keras.Sequential()
 
     # Input layer
-    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE, input_shape=state_shape, activation='relu', 
+    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE, input_shape=(85,80,1), activation='relu', 
         padding='same', kernel_initializer=initializer))
     model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
 
     # Hidden convolutional layers
-    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, input_shape=state_shape, activation='relu', 
-        padding='same', kernel_initializer=initializer))
+    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, activation='relu', padding='same', 
+        kernel_initializer=initializer))
     model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
-    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, input_shape=state_shape, activation='relu', 
-        padding='same', kernel_initializer=initializer))
+    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, activation='relu', padding='same', 
+        kernel_initializer=initializer))
     model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
 
     # Flatten and use fully connected network
@@ -147,9 +147,9 @@ def train(env, replay_memory, model, target_model):
         return
 
     batch = random.sample(replay_memory, BATCH_SIZE)
-    states = np.array(step[0] for step in batch)
+    states = np.array([step[0] for step in batch])
     q_values = model.predict(states)
-    succesive_states = np.array(step[3] for step in batch)
+    succesive_states = np.array([step[3] for step in batch])
     succesive_q_values = target_model.predict(succesive_states)
 
     X_train = []
@@ -168,12 +168,12 @@ def train(env, replay_memory, model, target_model):
         # q_value_arr for a state s : [qVal action1, qval action1, ..., qval action18] 
         q_value_arr = q_values[i]
         # Qvalue for action a  : Q(s,a) + alpha(r(s) + gamma*max_a'(Q(s',a')) - Q(s, a))         
-        q_value_arr[action] = q_value_arr[action] + LEARNING_RATE(qValue - q_value_arr[action])
+        q_value_arr[action] = q_value_arr[action] + LEARNING_RATE * (qValue - q_value_arr[action])
 
         X_train.append(state)
-        Y_train.append()
+        Y_train.append(q_value_arr)
     
-    model.fit(np.array(X_train), np.array[Y_train], batch_size=BATCH_SIZE)
+    model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE)
 
 
 
@@ -209,7 +209,7 @@ def DQN_agent(env):
             else:
                 # Exploit best action from cnn
                 preprocessed_state = preprocess(state) # Preprocess state
-                predictions = model.predict(preprocessed_state).flatten()
+                predictions = model.predict(np.array([preprocessed_state,])).flatten()
                 action = np.argmax(predictions)
             
             new_state, reward, done, info = env.step(action)
@@ -246,6 +246,8 @@ if __name__ == "__main__":
 
     model = network(state_shape, action_shape)
     model.summary()
+
+    # DQN_agent(env)
 
     env.close()
 
