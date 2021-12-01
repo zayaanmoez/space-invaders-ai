@@ -1,4 +1,5 @@
 import gym
+from gym.wrappers import Monitor
 import random
 from tensorflow import keras
 import matplotlib.pyplot as plt
@@ -11,19 +12,20 @@ from itertools import islice
 # Hyperparameters
 
 BATCH_SIZE = 64
-REPLAY_SIZE = 1000
+REPLAY_SIZE = 2000
 EPISODES = 300
-TARGET_MODEL_UPDATE = 100
-REPLAY_MEMORY = 100_000
+TARGET_MODEL_UPDATE = 200
+REPLAY_MEMORY = 50_000
 
 # CNN model params
-LEARNING_RATE = 0.001
-KERNEL_SIZE = 3
+LEARNING_RATE = 0.003
+KERNEL_SIZE = [8,4,3]
+STRIDES = [4,2,1]
 POOL_SIZE = 2
 
 # Q-learning params
-Q_LEARNING_RATE = 0.5
-DISCOUNT_FACTOR = 0.5
+Q_LEARNING_RATE = 0.2
+DISCOUNT_FACTOR = 0.99
 
 
 #################################################################################
@@ -111,21 +113,21 @@ def network(state_shape, action_shape):
     model = keras.Sequential()
 
     # Input layer
-    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE, input_shape=(85,80,1), activation='relu', 
-        padding='same', kernel_initializer=initializer))
-    model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
+    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE[0], input_shape=(85,80,1), activation='relu', 
+        padding='same', strides=STRIDES[0], kernel_initializer=initializer))
+    #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
 
     # Hidden convolutional layers
-    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, activation='relu', padding='same', 
-        kernel_initializer=initializer))
-    model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
-    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE, activation='relu', padding='same', 
-        kernel_initializer=initializer))
-    model.add(keras.layers.AveragePooling2D(pool_size=POOL_SIZE))
+    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE[1], activation='relu', padding='same', 
+        strides=STRIDES[0], kernel_initializer=initializer))
+    #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
+    model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE[2], activation='relu', padding='same', 
+        strides=STRIDES[0], kernel_initializer=initializer))
+    #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
 
     # Flatten and use fully connected network
     model.add(keras.layers.Flatten())
-    model.add(keras.layers.Dense(1024, activation='relu', kernel_initializer=initializer))
+    model.add(keras.layers.Dense(512, activation='relu', kernel_initializer=initializer))
 
     # Output layer
     model.add(keras.layers.Dense(action_shape, activation='softmax', kernel_initializer=initializer))
@@ -140,8 +142,6 @@ def network(state_shape, action_shape):
 # Training agent
 
 def train(env, replay_memory, model, target_model):
-
-    replay_len = len(replay_memory)
 
     if len(replay_memory) <= REPLAY_SIZE:
         return
@@ -182,7 +182,9 @@ def train(env, replay_memory, model, target_model):
 
 def DQN_agent(env):
     epsilon = 1
-    decay = 0.01
+    eps_min = 0.05
+    eps_max = 1
+    decay_steps = 500000
 
     model = network(state_shape, action_shape)
     target_model = network(state_shape, action_shape)
@@ -203,6 +205,9 @@ def DQN_agent(env):
             step_counter += 1
 
             # Epsilon Greedy Strategy with explore probability epsilon
+            # Decay for epsilon (explore with atleast eps_min probability)
+            epsilon = max(eps_min, (eps_max - (eps_max-eps_min) * step_counter/decay_steps))
+
             if np.random.rand() <= epsilon:
                 # Explore 
                 action = env.action_space.sample()
@@ -212,6 +217,7 @@ def DQN_agent(env):
                 predictions = model.predict(np.array([preprocessed_state,])).flatten()
                 action = np.argmax(predictions)
             
+
             new_state, reward, done, info = env.step(action)
             replay_memory.append([preprocess(state), action, reward, preprocess(new_state), done]) # ERROR CHECK: When done cannot preprocess next state
 
@@ -227,9 +233,6 @@ def DQN_agent(env):
 
             if done:
                   print('Score: {} after epsidoe = {} and final reward = {}'.format(score, episode, reward))
-            
-        # Exponetial decay for epsilon (explore with atleast 0.01 or 1% probability)
-        epsilon = 0.01 + 0.99 * np.exp(-decay*episode)
 
 
 
@@ -249,6 +252,8 @@ if __name__ == "__main__":
 
     # DQN_agent(env)
 
+    model.save()
+
     env.close()
 
     ### Testing
@@ -263,3 +268,44 @@ if __name__ == "__main__":
     # obs_preprocessed = preprocess(env.env)
     # plt.imshow(obs_preprocessed, cmap='gray')
     # plt.show()
+
+
+
+#################################################################################
+# Testing the model performance
+
+def test():
+    env = gym.make('ALE/SpaceInvaders-v5', render_mode='human')
+    env = Monitor(env, './video', force=True)
+    state = env.reset()
+
+    TEST_EPISODES = 100
+
+    model = keras.models.load_save()
+    scores = []
+
+    for episode in range(TEST_EPISODES):
+        done = False
+        score = 0
+
+        while not done:
+
+            preprocessed_state = preprocess(state) # Preprocess state
+            predictions = model.predict(np.array([preprocessed_state,])).flatten()
+            action = np.argmax(predictions)
+
+            new_state, reward, done, info = env.step(action)
+
+            state = new_state
+            score += reward
+
+            if done:
+                scores.append(score)
+                print('episode: {}, score: {}'.format(episode, score))
+
+    
+    x = np.array([i for i in range(TEST_EPISODES)])
+    y = np.array(scores)
+    
+    plt.plot(x, y)
+    plt.show()
