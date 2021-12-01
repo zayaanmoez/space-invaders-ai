@@ -67,12 +67,6 @@ def preprocess(obs, normalize=False):
 frame_skip = 4 # only one every four screenshot is considered. If there is no subsampling, not enough information to discern motion
 frame_stack_size = 4
 
-# initialize with zeroes
-stacked_frames = deque(maxlen = frame_stack_size)
-for i in range(frame_stack_size):
-    stacked_frames.append([np.zeros((85,80), dtype=int)])
-
-
 def stack_frames(stacked_frames, state, is_new):
     frame = preprocess(state)
     if is_new: # new episode
@@ -113,7 +107,7 @@ def network(state_shape, action_shape):
     model = keras.Sequential()
 
     # Input layer
-    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE[0], input_shape=(85,80,1), activation='relu', 
+    model.add(keras.layers.Conv2D(32, kernel_size=KERNEL_SIZE[0], input_shape=(4,85,80,1), activation='relu', 
         padding='same', strides=STRIDES[0], kernel_initializer=initializer))
     #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
 
@@ -190,6 +184,11 @@ def DQN_agent(env):
     target_model = network(state_shape, action_shape)
     target_model.set_weights(model.get_weights())
 
+    # initialize with zeroes
+    stacked_frames = deque(maxlen = frame_stack_size)
+    for i in range(frame_stack_size):
+        stacked_frames.append([np.zeros((85,80), dtype=int)])
+
     # Memory buffer to store the last N experiences
     replay_memory = deque(maxlen=REPLAY_MEMORY)
 
@@ -200,6 +199,8 @@ def DQN_agent(env):
         state = env.reset()
         score = 0 
         done = False
+
+        stacked_state, stacked_frames = stack_frames(stacked_frames, state, True)
 
         while not done:
             step_counter += 1
@@ -213,18 +214,19 @@ def DQN_agent(env):
                 action = env.action_space.sample()
             else:
                 # Exploit best action from cnn
-                preprocessed_state = preprocess(state) # Preprocess state
-                predictions = model.predict(np.array([preprocessed_state,])).flatten()
+                predictions = model.predict(np.array([stacked_state,])).flatten()
                 action = np.argmax(predictions)
             
 
             new_state, reward, done, info = env.step(action)
-            replay_memory.append([preprocess(state), action, reward, preprocess(new_state), done]) # ERROR CHECK: When done cannot preprocess next state
+            new_stacked_state, stacked_frames = stack_frames(stacked_frames, new_state, False)
 
             if step_counter % 4 == 0 or done:
+                replay_memory.append([stacked_state, action, reward, new_stacked_state, done])
                 train(env, replay_memory, model, target_model)
 
             score += reward
+            stacked_state = new_stacked_state
             state = new_state
 
             if update_target_counter >= TARGET_MODEL_UPDATE:
@@ -250,9 +252,9 @@ if __name__ == "__main__":
     model = network(state_shape, action_shape)
     model.summary()
 
-    # DQN_agent(env)
+    DQN_agent(env)
 
-    model.save()
+    # model.save()
 
     env.close()
 
@@ -306,6 +308,8 @@ def test():
     
     x = np.array([i for i in range(TEST_EPISODES)])
     y = np.array(scores)
+
+    print(np.average(y))
     
     plt.plot(x, y)
     plt.show()
