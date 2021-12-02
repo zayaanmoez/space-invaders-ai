@@ -1,5 +1,5 @@
 import gym
-from gym.wrappers import Monitor
+# from gym.wrappers import Monitor
 import random
 from tensorflow import keras
 import matplotlib.pyplot as plt
@@ -234,7 +234,7 @@ def DQN_agent(env):
                     target_model.set_weights(model.get_weights())
 
             if done:
-                  print('Score: {} after epsidoe = {} and final reward = {}'.format(score, episode, reward))
+                  print('Score: {} after epsidoe = {}'.format(score, episode))
 
 
 
@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     DQN_agent(env)
 
-    model.save()
+    model.save("models/model#")
 
     env.close()
 
@@ -278,28 +278,36 @@ if __name__ == "__main__":
 
 def test():
     env = gym.make('ALE/SpaceInvaders-v5', render_mode='human')
-    env = Monitor(env, './video', force=True)
     state = env.reset()
 
     TEST_EPISODES = 100
 
-    model = keras.models.load_save()
+    model = keras.models.load_model("models/model#")
     scores = []
+    
+    # initialize with zeroes
+    stacked_frames = deque(maxlen = frame_stack_size)
+    for i in range(frame_stack_size):
+        stacked_frames.append([np.zeros((85,80), dtype=int)])
 
     for episode in range(TEST_EPISODES):
+        state = env.reset()
+        score = 0 
         done = False
-        score = 0
+
+        stacked_state, stacked_frames = stack_frames(stacked_frames, state, True)
 
         while not done:
-
-            preprocessed_state = preprocess(state) # Preprocess state
-            predictions = model.predict(np.array([preprocessed_state,])).flatten()
+            predictions = model.predict(np.array([stacked_state,])).flatten()
             action = np.argmax(predictions)
 
-            new_state, reward, done, info = env.step(action)
 
-            state = new_state
+            new_state, reward, done, info = env.step(action)
+            new_stacked_state, stacked_frames = stack_frames(stacked_frames, new_state, False)
+
             score += reward
+            stacked_state = new_stacked_state
+            state = new_state
 
             if done:
                 scores.append(score)
