@@ -11,8 +11,8 @@ from itertools import islice
 #################################################################################
 # Hyperparameters
 
-BATCH_SIZE = 64
-REPLAY_SIZE = 2000
+BATCH_SIZE = 128
+REPLAY_SIZE = 1000
 EPISODES = 300
 TARGET_MODEL_UPDATE = 200
 REPLAY_MEMORY = 50_000
@@ -24,8 +24,8 @@ STRIDES = [4,2,1]
 POOL_SIZE = 2
 
 # Q-learning params
-Q_LEARNING_RATE = 0.2
-DISCOUNT_FACTOR = 0.99
+Q_LEARNING_RATE = 0.7
+DISCOUNT_FACTOR = 0.97
 
 
 #################################################################################
@@ -103,7 +103,7 @@ def preproces_plot():
 
 def network(state_shape, action_shape):
     
-    initializer = keras.initializers.HeUniform()
+    initializer = keras.initializers.HeNormal()
     model = keras.Sequential()
 
     # Input layer
@@ -113,10 +113,10 @@ def network(state_shape, action_shape):
 
     # Hidden convolutional layers
     model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE[1], activation='relu', padding='same', 
-        strides=STRIDES[0], kernel_initializer=initializer))
+        strides=STRIDES[1], kernel_initializer=initializer))
     #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
     model.add(keras.layers.Conv2D(64, kernel_size=KERNEL_SIZE[2], activation='relu', padding='same', 
-        strides=STRIDES[0], kernel_initializer=initializer))
+        strides=STRIDES[2], kernel_initializer=initializer))
     #model.add(keras.layers.MaxPooling2D(pool_size=POOL_SIZE))
 
     # Flatten and use fully connected network
@@ -124,7 +124,7 @@ def network(state_shape, action_shape):
     model.add(keras.layers.Dense(512, activation='relu', kernel_initializer=initializer))
 
     # Output layer
-    model.add(keras.layers.Dense(action_shape, activation='softmax', kernel_initializer=initializer))
+    model.add(keras.layers.Dense(action_shape, activation='softmax'))
 
     model.compile(loss=keras.losses.Huber(), optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE), metrics=['accuracy'])
     
@@ -149,13 +149,13 @@ def train(env, replay_memory, model, target_model):
     X_train = []
     Y_train = []
 
-    for i, (state, action, reward, new_state, done) in enumerate(batch):
-        if not done:
+    for i, (state, action, reward, new_state, dead) in enumerate(batch):
+        if not dead:
             # Bellman Equation : r(s) + gamma * max_a'(Q(s',a'))
             qValue = reward + DISCOUNT_FACTOR * np.max(succesive_q_values[i])
         else:
-            # Pick reward as the episode has ended; no succesive state
-            qValue = reward
+            # Negative reward if lost a life
+            qValue = -1
         
         # TODO: Figure out y_train values work or not
         # Temporal Difference
@@ -178,7 +178,7 @@ def DQN_agent(env):
     epsilon = 1
     eps_min = 0.05
     eps_max = 1
-    decay = 0.01
+    decay = 0.015
 
     model = network(state_shape, action_shape)
     target_model = network(state_shape, action_shape)
@@ -199,11 +199,15 @@ def DQN_agent(env):
         state = env.reset()
         score = 0 
         done = False
+        dead = False
+        start_life = 3
 
+        state,_,_,_ = env.step(0)
         stacked_state, stacked_frames = stack_frames(stacked_frames, state, True)
 
         while not done:
             step_counter += 1
+            dead = False
 
             # Epsilon Greedy Strategy with explore probability epsilon
             if np.random.rand() <= epsilon:
@@ -213,13 +217,17 @@ def DQN_agent(env):
                 # Exploit best action from cnn
                 predictions = model.predict(np.array([stacked_state,])).flatten()
                 action = np.argmax(predictions)
-            
+
 
             new_state, reward, done, info = env.step(action)
             new_stacked_state, stacked_frames = stack_frames(stacked_frames, new_state, False)
+            
+            if start_life > info['lives']:
+                dead = True
+                start_life = info['lives']
 
             if step_counter % 4 == 0 or done:
-                replay_memory.append([stacked_state, action, reward, new_stacked_state, done])
+                replay_memory.append([stacked_state, action, reward, new_stacked_state, dead])
                 train(env, replay_memory, model, target_model)
 
             score += reward
@@ -231,7 +239,7 @@ def DQN_agent(env):
                     target_model.set_weights(model.get_weights())
 
             if done:
-                  print('Score: {} after epsidoe = {}'.format(score, episode))
+                    print('Score: {} after epsidoe = {}'.format(score, episode))
 
         # Exponential Decay for epsilon (explore with atleast eps_min probability)
         epsilon = eps_min + (eps_max - eps_min) * np.exp(-decay * episode)
@@ -243,7 +251,7 @@ def DQN_agent(env):
 
 if __name__ == "__main__":
 
-    env = gym.make('ALE/SpaceInvaders-v5', render_mode='human')
+    env = gym.make('SpaceInvaders-v4', render_mode='human')
     env.reset()
 
     state_shape = env.observation_space.shape
