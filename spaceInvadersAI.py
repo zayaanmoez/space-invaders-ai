@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     DQN_agent(env)
 
-    # model.save()
+    model.save()
 
     env.close()
 
