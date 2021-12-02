@@ -178,7 +178,7 @@ def DQN_agent(env):
     epsilon = 1
     eps_min = 0.05
     eps_max = 1
-    decay_steps = 500000
+    decay = 0.01
 
     model = network(state_shape, action_shape)
     target_model = network(state_shape, action_shape)
@@ -206,9 +206,6 @@ def DQN_agent(env):
             step_counter += 1
 
             # Epsilon Greedy Strategy with explore probability epsilon
-            # Decay for epsilon (explore with atleast eps_min probability)
-            epsilon = max(eps_min, (eps_max - (eps_max-eps_min) * step_counter/decay_steps))
-
             if np.random.rand() <= epsilon:
                 # Explore 
                 action = env.action_space.sample()
@@ -235,6 +232,9 @@ def DQN_agent(env):
 
             if done:
                   print('Score: {} after epsidoe = {}'.format(score, episode))
+
+        # Exponential Decay for epsilon (explore with atleast eps_min probability)
+        epsilon = eps_min + (eps_max - eps_min) * np.exp(-decay * episode)
 
 
 
