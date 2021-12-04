@@ -253,7 +253,7 @@ def DQN_agent(env):
 
             if step_counter % 4 == 0 or done:
                 epoch += 1
-                train(env, replay_memory, model, target_model)
+                train(env, replay_memory, model, target_model, epoch)
 
             score += reward
             stacked_state = new_stacked_state
