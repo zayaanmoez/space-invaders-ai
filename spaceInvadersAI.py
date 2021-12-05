@@ -310,7 +310,7 @@ if __name__ == "__main__":
 # Testing the model performance
 
 def test():
-    env = gym.make('SpaceInvaders-v4, render_mode='human')
+    env = gym.make('SpaceInvaders-v4', render_mode='human')
     state = env.reset()
 
     TEST_EPISODES = 100
