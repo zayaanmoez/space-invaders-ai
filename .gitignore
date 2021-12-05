@@ -3,3 +3,5 @@ venv
 .ipynb_checkpoints
 .vs
 tmp/
+video/
+models/

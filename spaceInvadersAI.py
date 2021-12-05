@@ -355,7 +355,9 @@ if __name__ == "__main__":
 # Testing the model performance
 
 def test():
+
     env = wrap_env_video(gym.make('SpaceInvaders-v4', render_mode='human'))
+
     state = env.reset()
 
     TEST_EPISODES = 100
