@@ -13,7 +13,7 @@ from itertools import islice
 
 BATCH_SIZE = 128
 REPLAY_SIZE = 2000
-EPISODES = 10
+EPISODES = 5
 TARGET_MODEL_UPDATE = 200
 REPLAY_MEMORY = 50_000
 
@@ -33,16 +33,21 @@ DISCOUNT_FACTOR = 0.97
 fit_metrics = ['loss', 'mean_squared_error']
 fit_history = dict((metric, []) for metric in fit_metrics)
 fit_history_ep_avg = dict((metric, []) for metric in fit_metrics)
+fit_history_score = []
 
 # Plot training data
 def plot():
     for key in fit_metrics:
-        print(fit_history_ep_avg)
         plt.plot(fit_history_ep_avg[key])
         plt.title('model '+key)
         plt.ylabel(key)
         plt.xlabel('episode')
         plt.show()
+    plt.plot(fit_history_score)
+    plt.title('model reward distribution')
+    plt.ylabel('score')
+    plt.xlabel('episode')
+    plt.show()
 
 # update metrics average
 def update_history_avg():
@@ -50,6 +55,10 @@ def update_history_avg():
         avg = np.average(fit_history[key])
         fit_history_ep_avg[key].append(avg)
         fit_history[key] = []
+
+# update score/reward distribution
+def update_history_score(score):
+    fit_history_score.append(score)
 
 #################################################################################
 # Preprocessing
@@ -64,20 +73,12 @@ def preprocess(obs, normalize=False):
     # Take greyscale (black and white)
     img = img.mean(axis=2)  
 
-    # color = np.array([210, 164, 74]).mean()
-    # img[img==color] = 0  
-    # img[img==144] = 0
-    # img[img==109] = 0
     img[img != 0] = 1
 
     # Is this needed? normalize the image from -1 to +1  
     # No difference visually but tensor is different
     if normalize:
         img = (img - 128) / 128 - 1  
-
-    # print("before: ", obs.shape)
-    # print("after: ", img.shape)
-
     # reshape to 1D tensor
     return img.reshape(85,80,1)
 
@@ -293,37 +294,24 @@ def DQN_agent(env):
             if done:
                 print('Score: {} after episode = {}'.format(score, episode))
                 update_history_avg()
+                update_history_score(score)
 
         # Exponential Decay for epsilon (explore with atleast eps_min probability)
         epsilon = eps_min + (eps_max - eps_min) * np.exp(-decay * episode)
 
 #################################################################################
-# Record and display test video
+# Record test video
 
 def wrap_env_video(env):
   env = Monitor(env, './video', force=True)
   return env
-
-def show_video():
-  mp4list = glob.glob('video/*.mp4')
-  if len(mp4list) > 0:
-    mp4 = mp4list[0]
-    video = io.open(mp4, 'r+b').read()
-    encoded = base64.b64encode(video)
-    ipythondisplay.display(HTML(data='''<video alt="test" autoplay 
-                loop controls style="height: 400px;">
-                <source src="data:video/mp4;base64,{0}" type="video/mp4" />
-             </video>'''.format(encoded.decode('ascii'))))
-  else: 
-    print("Could not find video")
 
 #################################################################################
 # Main
 
 if __name__ == "__main__":
 
-    # env = wrap_env_video(gym.make('SpaceInvaders-v4'))
-    gym.make('SpaceInvaders-v4')
+    env = gym.make('SpaceInvaders-v4')
     env.reset()
 
     state_shape = env.observation_space.shape
