@@ -2,6 +2,6 @@ venv
 .idea
 .ipynb_checkpoints
 .vs
-tmp
-video
-models
+tmp/
+video/
+models/

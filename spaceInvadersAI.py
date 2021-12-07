@@ -1,5 +1,5 @@
 import gym
-# from gym.wrappers import Monitor
+from gym.wrappers import Monitor
 import random
 from tensorflow import keras
 import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ from itertools import islice
 
 BATCH_SIZE = 128
 REPLAY_SIZE = 2000
-EPISODES = 500
+EPISODES = 5
 TARGET_MODEL_UPDATE = 200
 REPLAY_MEMORY = 50_000
 
@@ -27,6 +27,38 @@ POOL_SIZE = 2
 Q_LEARNING_RATE = 0.7
 DISCOUNT_FACTOR = 0.97
 
+#################################################################################
+# Metrics to plot
+
+fit_metrics = ['loss', 'mean_squared_error']
+fit_history = dict((metric, []) for metric in fit_metrics)
+fit_history_ep_avg = dict((metric, []) for metric in fit_metrics)
+fit_history_score = []
+
+# Plot training data
+def plot():
+    for key in fit_metrics:
+        plt.plot(fit_history_ep_avg[key])
+        plt.title('model '+key)
+        plt.ylabel(key)
+        plt.xlabel('episode')
+        plt.show()
+    plt.plot(fit_history_score)
+    plt.title('model reward distribution')
+    plt.ylabel('score')
+    plt.xlabel('episode')
+    plt.show()
+
+# update metrics average
+def update_history_avg():
+    for key in fit_metrics:
+        avg = np.average(fit_history[key])
+        fit_history_ep_avg[key].append(avg)
+        fit_history[key] = []
+
+# update score/reward distribution
+def update_history_score(score):
+    fit_history_score.append(score)
 
 #################################################################################
 # Preprocessing
@@ -41,20 +73,12 @@ def preprocess(obs, normalize=False):
     # Take greyscale (black and white)
     img = img.mean(axis=2)  
 
-    # color = np.array([210, 164, 74]).mean()
-    # img[img==color] = 0  
-    # img[img==144] = 0
-    # img[img==109] = 0
     img[img != 0] = 1
 
     # Is this needed? normalize the image from -1 to +1  
     # No difference visually but tensor is different
     if normalize:
         img = (img - 128) / 128 - 1  
-
-    # print("before: ", obs.shape)
-    # print("after: ", img.shape)
-
     # reshape to 1D tensor
     return img.reshape(85,80,1)
 
@@ -80,7 +104,7 @@ def stack_frames(stacked_frames, state, is_new):
     return stacked_state, stacked_frames
 
 # Display the preprocessed images
-def preproces_plot():
+def preprocess_plot():
     obs = env.reset()
 
     for i in range(10):
@@ -183,9 +207,13 @@ def train(env, replay_memory, model, target_model, epoch):
             mode='min')
 
         # Model weights are saved if it's the best seen so far.
-        model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE, callbacks=[model_checkpoint_callback]) 
+        history = model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE, callbacks=[model_checkpoint_callback]) 
     else:
-        model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE)
+        history = model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE)
+
+    for key in history.history.keys():
+        fit_history[key].append(history.history[key][0]) # since model.fit with default num epochs = 1
+
 
 #     # The model weights (that are considered the best) are loaded into the model.
 #     model.load_weights(checkpoint_filepath)
@@ -264,19 +292,26 @@ def DQN_agent(env):
                     target_model.set_weights(model.get_weights())
 
             if done:
-                print('Score: {} after epsidoe = {}'.format(score, episode))
+                print('Score: {} after episode = {}'.format(score, episode))
+                update_history_avg()
+                update_history_score(score)
 
         # Exponential Decay for epsilon (explore with atleast eps_min probability)
         epsilon = eps_min + (eps_max - eps_min) * np.exp(-decay * episode)
 
+#################################################################################
+# Record test video
 
+def wrap_env_video(env):
+  env = Monitor(env, './video', force=True)
+  return env
 
 #################################################################################
 # Main
 
 if __name__ == "__main__":
 
-    env = gym.make('SpaceInvaders-v4', render_mode='human')
+    env = gym.make('SpaceInvaders-v4')
     env.reset()
 
     state_shape = env.observation_space.shape
@@ -288,7 +323,7 @@ if __name__ == "__main__":
     DQN_agent(env)
 
     model.save("models/model#")
-
+    plot()
     env.close()
 
     ### Testing
@@ -296,7 +331,7 @@ if __name__ == "__main__":
 
     # print(state_shape)
     # train()
-    # preproces_plot()
+    # preprocess_plot()
 
     # print(env.action_space)
     # print(env.observation_space)
@@ -304,13 +339,13 @@ if __name__ == "__main__":
     # plt.imshow(obs_preprocessed, cmap='gray')
     # plt.show()
 
-
-
 #################################################################################
 # Testing the model performance
 
 def test():
-    env = gym.make('SpaceInvaders-v4', render_mode='human')
+
+    env = wrap_env_video(gym.make('SpaceInvaders-v4', render_mode='human'))
+
     state = env.reset()
 
     TEST_EPISODES = 100
@@ -354,3 +389,5 @@ def test():
     
     plt.plot(x, y)
     plt.show()
+
+
