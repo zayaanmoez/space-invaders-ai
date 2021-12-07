@@ -30,10 +30,11 @@ DISCOUNT_FACTOR = 0.97
 #################################################################################
 # Metrics to plot
 
-fit_metrics = ['loss', 'mean_squared_error']
+fit_metrics = ['loss', 'mean_squared_error', 'logcosh', 'precision']
 fit_history = dict((metric, []) for metric in fit_metrics)
 fit_history_ep_avg = dict((metric, []) for metric in fit_metrics)
 fit_history_score = []
+
 
 # Plot training data
 def plot():
@@ -152,7 +153,7 @@ def network(state_shape, action_shape):
     # Output layer
     model.add(keras.layers.Dense(action_shape, activation='softmax'))
 
-    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE), metrics=[keras.metrics.MeanSquaredError()])
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE), metrics=[keras.metrics.MeanSquaredError(), keras.metrics.LogCoshError(), keras.metrics.Precision()])
     
     return model
 
@@ -187,7 +188,7 @@ def train(env, replay_memory, model, target_model, epoch):
         # Temporal Difference
         # q_value_arr for a state s : [qVal action1, qval action1, ..., qval action18] 
         q_value_arr = q_values[i]
-        # Qvalue for action a  : Q(s,a) + alpha(r(s) + gamma*max_a'(Q(s',a')) - Q(s, a))         
+        # Qvalue for action a  : Q(s,a) + alpha(r(s) + gamma*max_a'(Q(s',a')) - Q(s, a))
         # q_value_arr[action] = (1 - Q_LEARNING_RATE) * q_value_arr[action] + Q_LEARNING_RATE * qValue
         q_value_arr[action] = qValue # q_value_arr[action] - LEARNING_RATE * (qValue - q_value_arr[action])
 
