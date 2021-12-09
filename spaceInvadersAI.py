@@ -93,19 +93,17 @@ frame_skip = 4 # only one every four screenshot is considered. If there is no su
 frame_stack_size = 4
 
 
-def stack_frames(stacked_frames, previous_frame, state, is_new, is_consecutive):
+def stack_frames(stacked_frames, previous_frame, state, is_new):
     frame = preprocess(state)
     if is_new: # new episode
         # replace stacked_frames with 4 copies of current frame
         for i in range(frame_stack_size):
             stacked_frames.append(frame)
-    elif is_consecutive:
+    else:
         # take elementwise maxima of newest frame in stacked_frames and frame
         stacked_frames.append(np.maximum(previous_frame, frame))
-    else:
-        previous_frame = frame
     stacked_state = np.stack(stacked_frames)
-    return stacked_state, stacked_frames, previous_frame
+    return stacked_state, stacked_frames
 
 # Display the preprocessed images
 def preprocess_plot():
@@ -245,7 +243,7 @@ def DQN_agent(env):
     target_model.set_weights(model.get_weights())
 
     # initialize with zeroes
-    previous_frame = None
+    previous_frame = [np.zeros((85,80), dtype=int)]
     stacked_frames = deque(maxlen = frame_stack_size)
     for i in range(frame_stack_size):
         stacked_frames.append([np.zeros((85,80), dtype=int)])
@@ -265,7 +263,7 @@ def DQN_agent(env):
         start_life = 3
         
         state,_,_,_ = env.step(0)
-        stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, state, True, False)
+        stacked_state, stacked_frames = stack_frames(stacked_frames, previous_frame, state, True)
 
         while not done:
             step_counter += 1
@@ -284,7 +282,7 @@ def DQN_agent(env):
             new_state, reward, done, info = env.step(action)
 
             if step_counter % frame_skip == 0:
-                new_stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, new_state, False, True)
+                new_stacked_state, stacked_frames = stack_frames(stacked_frames, previous_frame, new_state, False)
                 
                 if start_life > info['lives']:
                     dead = True
@@ -296,7 +294,7 @@ def DQN_agent(env):
                 state = new_state
 
             if step_counter % (frame_skip - 1) == 0:
-                new_stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, new_state, False, False)
+                previous_frame = preprocess(new_state)
             
             score += reward
 
@@ -384,22 +382,21 @@ def test():
 
 if __name__ == "__main__":
 
-    env = gym.make('SpaceInvaders-v4')
-    env.reset()
+    # env = gym.make('SpaceInvaders-v4')
+    # env.reset()
 
-    state_shape = env.observation_space.shape
-    action_shape = env.action_space.n
+    # state_shape = env.observation_space.shape
+    # action_shape = env.action_space.n
 
-    # model = network(state_shape, action_shape)
-    # model.summary()
+    # # model = network(state_shape, action_shape)
+    # # model.summary()
 
-    DQN_agent(env)
+    # DQN_agent(env)
 
-    # model.save("models/model#")
-    plot()
-    env.close()
+    # plot()
+    # env.close()
 
-    # test()
+    test()
 
     ### Testing
     # print(env.unwrapped.get_action_meanings())
