@@ -1,3 +1,4 @@
+from PIL.Image import NONE
 import gym
 from gym.wrappers import Monitor
 import random
@@ -5,7 +6,6 @@ from tensorflow import keras
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import deque
-from itertools import islice
 
 
 #################################################################################
@@ -13,7 +13,7 @@ from itertools import islice
 
 BATCH_SIZE = 128
 REPLAY_SIZE = 2000
-EPISODES = 500
+EPISODES = 800
 TARGET_MODEL_UPDATE = 200
 REPLAY_MEMORY = 50_000
 
@@ -92,17 +92,20 @@ def preprocess(obs, normalize=False):
 frame_skip = 4 # only one every four screenshot is considered. If there is no subsampling, not enough information to discern motion
 frame_stack_size = 4
 
-def stack_frames(stacked_frames, state, is_new):
+
+def stack_frames(stacked_frames, previous_frame, state, is_new, is_consecutive):
     frame = preprocess(state)
     if is_new: # new episode
         # replace stacked_frames with 4 copies of current frame
         for i in range(frame_stack_size):
             stacked_frames.append(frame)
-    else:
+    elif is_consecutive:
         # take elementwise maxima of newest frame in stacked_frames and frame
-        stacked_frames.append(np.maximum(stacked_frames[3],frame))
+        stacked_frames.append(np.maximum(previous_frame, frame))
+    else:
+        previous_frame = frame
     stacked_state = np.stack(stacked_frames)
-    return stacked_state, stacked_frames
+    return stacked_state, stacked_frames, previous_frame
 
 # Display the preprocessed images
 def preprocess_plot():
@@ -211,6 +214,10 @@ def train(env, replay_memory, model, target_model, epoch):
             monitor='mean_squared_error',
             mode='min')
 
+        np.save('./tmp/fit_history.txt', fit_history)
+        np.save('./tmp/fit_history_ep.txt', fit_history_ep_avg)
+        np.save('./tmp/fit_history_score.txt', fit_history_score)
+
         # Model weights are saved if it's the best seen so far.
         history = model.fit(np.array(X_train), np.array(Y_train), batch_size=BATCH_SIZE, callbacks=[model_checkpoint_callback]) 
     else:
@@ -238,6 +245,7 @@ def DQN_agent(env):
     target_model.set_weights(model.get_weights())
 
     # initialize with zeroes
+    previous_frame = None
     stacked_frames = deque(maxlen = frame_stack_size)
     for i in range(frame_stack_size):
         stacked_frames.append([np.zeros((85,80), dtype=int)])
@@ -257,7 +265,7 @@ def DQN_agent(env):
         start_life = 3
         
         state,_,_,_ = env.step(0)
-        stacked_state, stacked_frames = stack_frames(stacked_frames, state, True)
+        stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, state, True, False)
 
         while not done:
             step_counter += 1
@@ -271,24 +279,31 @@ def DQN_agent(env):
                 # Exploit best action from cnn
                 predictions = model.predict(np.array([stacked_state,])).flatten()
                 action = np.argmax(predictions)
-
+            
 
             new_state, reward, done, info = env.step(action)
-            new_stacked_state, stacked_frames = stack_frames(stacked_frames, new_state, False)
+
+            if step_counter % frame_skip == 0:
+                new_stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, new_state, False, True)
+                
+                if start_life > info['lives']:
+                    dead = True
+                    start_life = info['lives']
+
+                replay_memory.append([stacked_state, action, reward, new_stacked_state, dead])
+
+                stacked_state = new_stacked_state
+                state = new_state
+
+            if step_counter % (frame_skip - 1) == 0:
+                new_stacked_state, stacked_frames, previous_frame = stack_frames(stacked_frames, previous_frame, new_state, False, False)
             
-            if start_life > info['lives']:
-                dead = True
-                start_life = info['lives']
-
-            replay_memory.append([stacked_state, action, reward, new_stacked_state, dead])
-
-            if step_counter % 4 == 0 or done:
-                epoch += 1
-                train(env, replay_memory, model, target_model, epoch)
-
             score += reward
-            stacked_state = new_stacked_state
-            state = new_state
+
+            if step_counter % (frame_stack_size*frame_skip) == 0 or done:
+                    epoch += 1
+                    train(env, replay_memory, model, target_model, epoch)
+
 
             if update_target_counter >= TARGET_MODEL_UPDATE:
                     update_target_counter = 0
@@ -301,6 +316,8 @@ def DQN_agent(env):
 
         # Exponential Decay for epsilon (explore with atleast eps_min probability)
         epsilon = eps_min + (eps_max - eps_min) * np.exp(-decay * episode)
+    
+    model.save("models/model#")
 
 #################################################################################
 # Record test video
@@ -309,38 +326,6 @@ def wrap_env_video(env):
   env = Monitor(env, './video', force=True)
   return env
 
-#################################################################################
-# Main
-
-if __name__ == "__main__":
-
-    env = gym.make('SpaceInvaders-v4')
-    env.reset()
-
-    state_shape = env.observation_space.shape
-    action_shape = env.action_space.n
-
-    model = network(state_shape, action_shape)
-    model.summary()
-
-    DQN_agent(env)
-
-    model.save("models/model#")
-    plot()
-    env.close()
-
-    ### Testing
-    # print(env.unwrapped.get_action_meanings())
-
-    # print(state_shape)
-    # train()
-    # preprocess_plot()
-
-    # print(env.action_space)
-    # print(env.observation_space)
-    # obs_preprocessed = preprocess(env.env)
-    # plt.imshow(obs_preprocessed, cmap='gray')
-    # plt.show()
 
 #################################################################################
 # Testing the model performance
@@ -392,5 +377,41 @@ def test():
     
     plt.plot(x, y)
     plt.show()
+
+
+#################################################################################
+# Main
+
+if __name__ == "__main__":
+
+    env = gym.make('SpaceInvaders-v4')
+    env.reset()
+
+    state_shape = env.observation_space.shape
+    action_shape = env.action_space.n
+
+    # model = network(state_shape, action_shape)
+    # model.summary()
+
+    DQN_agent(env)
+
+    # model.save("models/model#")
+    plot()
+    env.close()
+
+    # test()
+
+    ### Testing
+    # print(env.unwrapped.get_action_meanings())
+
+    # print(state_shape)
+    # train()
+    # preprocess_plot()
+
+    # print(env.action_space)
+    # print(env.observation_space)
+    # obs_preprocessed = preprocess(env.env)
+    # plt.imshow(obs_preprocessed, cmap='gray')
+    # plt.show()
 
 
